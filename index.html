@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mirror Effect</title>
+<style>
+  body { font-family: Arial; background:#222; color:white; text-align:center; padding:20px; }
+  canvas { background:black; max-width:90vw; margin-top:20px; }
+  button { margin:10px; padding:10px 20px; font-size:16px; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<h2>Mirror Effect</h2>
+
+<input type="file" id="fileInput" accept="image/*">
+<br>
+<button onclick="mirror()">Mirror</button>
+<button onclick="downloadImage()">Download</button>
+
+<canvas id="canvas"></canvas>
+
+<script>
+// Canvas and context
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+// Global reference to original image pixel data
+let imgData = null;
+
+// Load image from disk
+document.getElementById("fileInput").addEventListener("change", handleImage);
+
+function handleImage(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const img = new Image();
+  img.onload = () => {
+    // Set canvas to final mirrored output size: 2x width and 2x height
+    canvas.width = img.width * 2;
+    canvas.height = img.height * 2;
+
+    // Draw the original image temporarily to capture its pixels
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+
+    // Save original image pixels (only the original size area)
+    imgData = ctx.getImageData(0, 0, img.width, img.height);
+  };
+  img.src = URL.createObjectURL(file);
+}
+
+function mirror() {
+  if (!imgData) return;
+
+  const w = imgData.width;
+  const h = imgData.height;
+
+  // Clear any previous drawing
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 1️⃣ Original (top-left)
+  ctx.putImageData(imgData, 0, 0);
+
+  // 2️⃣ Horizontal flip (top-right)
+  ctx.save();
+  ctx.translate(w * 2, 0); // move to right side
+  ctx.scale(-1, 1);        // flip horizontally
+  ctx.putImageData(imgData, 0, 0);
+  ctx.restore();
+
+  // 3️⃣ Vertical flip (bottom-left)
+  ctx.save();
+  ctx.translate(0, h * 2); // move down
+  ctx.scale(1, -1);        // flip vertically
+  ctx.putImageData(imgData, 0, 0);
+  ctx.restore();
+
+  // 4️⃣ Horizontal + vertical flip (bottom-right)
+  ctx.save();
+  ctx.translate(w * 2, h * 2); // move to bottom-right
+  ctx.scale(-1, -1);           // flip both directions
+  ctx.putImageData(imgData, 0, 0);
+  ctx.restore();
+}
+
+// Save output as an image file
+function downloadImage() {
+  const link = document.createElement("a");
+  link.download = "mirror.png";
+  link.href = canvas.toDataURL();
+  link.click();
+}
+</script>
+
+</body>
+</html>
