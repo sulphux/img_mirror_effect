@@ -1,90 +1,169 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Shuffle Mirror</title>
+<meta charset="utf-8" />
+<title>KalejdoShuffle</title>
 <style>
-  body { font-family: sans-serif; background: #111; color: #eee; text-align: center; }
-  canvas { margin-top: 15px; background: #fff; }
-  button { margin: 10px; padding: 10px 20px; font-size: 16px; }
+  body{font-family:sans-serif;display:flex;gap:20px;padding:20px}
+  .panel{width:260px}
+  canvas{max-width:100%;height:auto;border:1px solid #ccc}
+  .slider{width:100%}
 </style>
 </head>
 <body>
 
-<h1>Shuffle Mirror Effect</h1>
-<input type="file" id="upload" accept="image/*">
-<button id="shuffleBtn" disabled>Shuffle</button>
-<br>
-<canvas id="canvas"></canvas>
+<div class="panel">
+  <h2>KalejdoShuffle</h2>
+
+  <!-- Load image -->
+  <input id="file" type="file" accept="image/*"/>
+
+  <!-- Strips slider -->
+  <p>Strips: <span id="val-strips">40</span></p>
+  <input id="strips" class="slider" type="range" min="2" max="400" value="40"/>
+
+  <!-- Buttons -->
+  <p>
+    <button id="kalejdo">KalejdoShuffle</button>
+    <button id="download">Download</button>
+  </p>
+</div>
+
+<canvas id="canvas" width="600" height="400"></canvas>
 
 <script>
-const upload = document.getElementById('upload');
-const shuffleBtn = document.getElementById('shuffleBtn');
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
+const file = document.getElementById("file");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+let original = null;
 
-let img = new Image();
-let tempCanvas = document.createElement('canvas');
-let tctx = tempCanvas.getContext('2d');
-
-upload.addEventListener('change', () => {
-    const file = upload.files[0];
-    if (!file) return;
-    img.src = URL.createObjectURL(file);
-});
-
-img.onload = () => {
-    // Fit canvas to image
-    canvas.width = img.width;
-    canvas.height = img.height;
-    tempCanvas.width = img.width;
-    tempCanvas.height = img.height;
-
-    // Draw the original image
-    ctx.drawImage(img, 0, 0);
-    shuffleBtn.disabled = false;
-};
-
-// Randomly mirror (horizontal, vertical, both, or none)
-function shuffleMirror() {
-    const w = canvas.width;
-    const h = canvas.height;
-
-    // Copy original image into temp canvas
-    tctx.clearRect(0, 0, w, h);
-    tctx.drawImage(canvas, 0, 0);
-
-    // Clear visible canvas
-    ctx.clearRect(0, 0, w, h);
-
-    // Random flip selection: 0=none,1=H,2=V,3=both
-    const mode = Math.floor(Math.random() * 4);
-
-    ctx.save();
-
-    // Horizontal flip
-    if (mode === 1) {
-        ctx.translate(w, 0);
-        ctx.scale(-1, 1);
-    }
-    // Vertical flip
-    else if (mode === 2) {
-        ctx.translate(0, h);
-        ctx.scale(1, -1);
-    }
-    // Horizontal + Vertical flip
-    else if (mode === 3) {
-        ctx.translate(w, h);
-        ctx.scale(-1, -1);
-    }
-
-    // Draw the flipped or original image
-    ctx.drawImage(tempCanvas, 0, 0);
-
-    ctx.restore();
+// Fit canvas to loaded image (keeping aspect)
+function fitCanvasToImage(iw, ih) {
+  const maxW = 1000, maxH = 800;
+  const ratio = Math.min(maxW/iw, maxH/ih, 1);
+  canvas.width = Math.round(iw * ratio);
+  canvas.height = Math.round(ih * ratio);
 }
 
-shuffleBtn.addEventListener('click', shuffleMirror);
+// Load image into canvas
+file.addEventListener("change", e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = async () => {
+    fitCanvasToImage(img.width, img.height);
+    original = await createImageBitmap(img);
+    ctx.drawImage(original, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+});
+
+// Display strip count
+document.getElementById("strips").addEventListener("input", () => {
+  document.getElementById("val-strips").textContent =
+    document.getElementById("strips").value;
+});
+
+// Main kaleidoscope shuffle effect
+document.getElementById("kalejdo").addEventListener("click", () => {
+  if (!original) return alert("Load an image first!");
+
+  // Draw original (fresh)
+  ctx.drawImage(original, 0, 0, canvas.width, canvas.height);
+
+  const w = canvas.width, h = canvas.height;
+  const src = ctx.getImageData(0, 0, w, h);
+
+  // Create 2x2 mirrored canvas
+  const big = document.createElement("canvas");
+  big.width = w * 2;
+  big.height = h * 2;
+  const bctx = big.getContext("2d");
+
+  // Temp canvas
+  const temp = document.createElement("canvas");
+  temp.width = w;
+  temp.height = h;
+  temp.getContext("2d").putImageData(src, 0, 0);
+
+  // TL original
+  bctx.drawImage(temp, 0, 0);
+  // TR horizontal flip
+  bctx.save(); bctx.translate(w*2, 0); bctx.scale(-1,1);
+  bctx.drawImage(temp,0,0); bctx.restore();
+  // BL vertical flip
+  bctx.save(); bctx.translate(0,h*2); bctx.scale(1,-1);
+  bctx.drawImage(temp,0,0); bctx.restore();
+  // BR both flip
+  bctx.save(); bctx.translate(w*2,h*2); bctx.scale(-1,-1);
+  bctx.drawImage(temp,0,0); bctx.restore();
+
+  // Shuffle helper
+  function shuffleStrips(c) {
+    const cw=c.width,ch=c.height;
+    const ctx2=c.getContext("2d");
+    const total=+document.getElementById("strips").value;
+    const stripW=Math.max(1,Math.floor(cw/total));
+    let parts=[];
+
+    for (let x=0;x<cw;x+=stripW) {
+      const s=Math.min(stripW,cw-x);
+      parts.push(ctx2.getImageData(x,0,s,ch));
+    }
+
+    let i=0,j=parts.length-1;
+    const order=[];
+    while(i<=j) {
+      order.push(parts[i]);
+      if(i!==j) order.push(parts[j]);
+      i++; j--;
+    }
+
+    const out=document.createElement("canvas");
+    out.width=cw; out.height=ch;
+    const octx=out.getContext("2d");
+    let pos=0;
+    for(const p of order){
+      octx.putImageData(p,pos,0);
+      pos+=p.width;
+    }
+    return out;
+  }
+
+  // Vertical shuffle
+  let out = shuffleStrips(big);
+
+  // Rotate + shuffle horizontally
+  function rotate90(c) {
+    const r=document.createElement("canvas");
+    r.width=c.height; r.height=c.width;
+    const rctx=r.getContext("2d");
+    rctx.translate(r.width/2,r.height/2);
+    rctx.rotate(Math.PI/2);
+    rctx.drawImage(c,-c.width/2,-c.height/2);
+    return r;
+  }
+
+  out = rotate90(out);
+  out = shuffleStrips(out);
+  out = rotate90(out); // back
+
+  // Draw final
+  canvas.width = out.width;
+  canvas.height = out.height;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(out,0,0);
+});
+
+// Download button
+document.getElementById("download").addEventListener("click", () => {
+  const link=document.createElement("a");
+  link.download="kalejdo.png";
+  link.href=canvas.toDataURL("image/png");
+  link.click();
+});
 </script>
 </body>
 </html>
